@@ -1,11 +1,21 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="tr">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Binance Replay</title>
 </head>
-<body>
-  <h1>Binance Replay Çalışıyor 🚀</h1>
+<body style="background:#111;color:white;text-align:center;font-family:sans-serif;">
+  <h1>Binance Replay</h1>
+  <p>Grafik burada görünecek 🔥</p>
+  <div id="chart" style="height:400px"></div>
+  <script>
+    fetch('/api/data')
+      .then(res => res.json())
+      .then(data => {
+        document.querySelector('#chart').innerText = JSON.stringify(data.slice(0,3), null, 2);
+      })
+      .catch(err => console.error(err));
+  </script>
 </body>
 </html>
