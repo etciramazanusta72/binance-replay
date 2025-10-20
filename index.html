@@ -1,46 +1,504 @@
 <!DOCTYPE html>
 <html lang="tr">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Binance Replay</title>
-    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
-    <style>
-      body {
-        background-color: #111;
-        color: #fff;
-        font-family: sans-serif;
-        margin: 0;
-        padding: 0;
-        text-align: center;
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Canlı Binance - Gelişmiş Araçlar</title>
+  <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+  <style>
+    :root{
+      --bg:#0f172a; --panel:#1e293b; --muted:#334155;
+    }
+    body{
+      margin:0;
+      background:var(--bg);
+      color:#fff;
+      font-family: Arial, sans-serif;
+      display:flex;
+      flex-direction:column;
+      height:100vh;
+      box-sizing:border-box;
+    }
+
+    /* Üst bar */
+    #topbar{
+      margin:8px;
+      padding:10px;
+      background:var(--panel);
+      border-radius:8px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:8px;
+    }
+    #topbar .left { display:flex; gap:8px; align-items:center; }
+
+    select, button {
+      background: #334155;
+      color: white;
+      border: none;
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      cursor:pointer;
+    }
+    select { min:width: 65px; }
+
+    /* Ana bölüm: sol araç + grafik */
+    #main{
+      margin:8px;
+      display:flex;
+      gap:8px; /* grafik ile sol araç arası boşluk */
+      flex:1;
+      min-height:0; /* flex child shrink için */
+    }
+
+    /* Sol sütun */
+    #tools{
+      width:72px;
+      background:var(--panel);
+      border-radius:8px;
+      padding:10px 6px;
+      box-sizing:border-box;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      gap:8px;
+      border:1px solid var(--muted);
+    }
+    #tools select{ width:56px; padding:6px 4px; text-align:center; }
+    #tools button{ width:48px; height:44px; font-size:18px; }
+
+    /* Grafik container */
+    #chartContainer{
+      flex:1;
+      background:transparent;
+      border-radius:8px;
+      position:relative;
+      display:flex;
+      flex-direction:column;
+      overflow:hidden;
+      border:1px solid var(--muted);
+    }
+    #chart{ flex:1; }
+
+    /* tooltip */
+    #tooltip{
+      position:absolute;
+      z-index:20;
+      display:none;
+      pointer-events:none;
+      background: rgba(30,41,59,0.98);
+      border:1px solid var(--muted);
+      border-radius:6px;
+      padding:8px 10px;
+      font-size:13px;
+      white-space:nowrap;
+      color:#fff;
+    }
+
+    /* Alt controls */
+    #controls{
+      margin:8px;
+      padding:10px;
+      background:var(--panel);
+      border-radius:8px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      border:1px solid var(--muted);
+    }
+    #controls .left{ display:flex; gap:8px; align-items:center; }
+    #controls .right{ font-family:monospace; color:#cbd5e1; }
+
+    /* küçük yardımcı stiller */
+    .tool-active { outline:2px solid #60a5fa; }
+  </style>
+</head>
+<body>
+  <!-- Üst bar -->
+  <div id="topbar">
+    <div class="left">
+      <select id="symbolSelect">
+        <option value="btcusdt">BTC/USDT</option>
+        <option value="ethusdt">ETH/USDT</option>
+        <option value="bnbusdt">BNB/USDT</option>
+        <option value="solusdt">SOL/USDT</option>
+        <option value="xrpusdt">XRP/USDT</option>
+      </select>
+
+      <select id="intervalSelect">
+        <option value="1m">1m</option>
+        <option value="5m">5m</option>
+        <option value="15m">15m</option>
+        <option value="1h">1h</option>
+        <option value="4h">4h</option>
+        <option value="1d">1d</option>
+      </select>
+
+      <button id="reload">Yenile</button>
+    </div>
+    <div class="right">
+      Gelişmiş Araçlı Grafik
+    </div>
+  </div>
+
+  <!-- Ana: sol araç + grafik -->
+  <div id="main">
+    <!-- Sol araç sütunu (dropdown + temizle) -->
+    <div id="tools">
+      <select id="toolSelect" title="Çizim Araçları">
+        <option value="">Araç</option>
+        <option value="trend">Trend</option>
+        <option value="hline">Yatay</option>
+        <option value="vline">Dikey</option>
+        <option value="channel">Kanal</option>
+        <option value="fibo">Fibonacci</option>
+        <option value="text">Metin</option>
+      </select>
+      <button id="tool-clear" title="Temizle">🗑️</button>
+    </div>
+
+    <!-- Grafik container -->
+    <div id="chartContainer">
+      <div id="chart"></div>
+      <div id="tooltip"></div>
+    </div>
+  </div>
+
+  <!-- Alt kontrol -->
+  <div id="controls">
+    <div class="left">
+      <button id="zoomIn">Zoom +</button>
+      <button id="zoomOut">Zoom -</button>
+      <button id="resetZoom">Reset</button>
+    </div>
+    <div class="right" id="info">Yükleniyor...</div>
+  </div>
+
+<script>
+/* ---------- Genel değişkenler ---------- */
+let chart = null;
+let candleSeries = null;
+let ws = null;
+let lastCandle = null;
+
+/* çizimler saklanacak: obje listesi */
+const drawings = []; // her item: {type:'hline'|'vline'|'line'|'fibo'|'text' , ref:obj, extra:...}
+
+/* drawing state */
+let drawingTool = ""; // seçili araç
+let tempState = {};   // örn trendStart, channelStart, fiboStart, etc
+
+/* elementler */
+const tooltip = document.getElementById('tooltip');
+const infoEl = document.getElementById('info');
+const symbolSelect = document.getElementById('symbolSelect');
+const intervalSelect = document.getElementById('intervalSelect');
+const toolSelect = document.getElementById('toolSelect');
+
+/* yardımcı fonksiyonlar */
+function formatTime(unixSeconds){
+  const d = new Date(unixSeconds * 1000);
+  const date = d.toLocaleDateString('tr-TR');
+  const time = d.toLocaleTimeString('tr-TR', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  return `${date} ${time}`;
+}
+function pctChange(open, close){
+  return (((close - open)/open)*100).toFixed(2);
+}
+function clearTempState(){ tempState = {}; }
+
+/* ---------- Chart init ---------- */
+function initChart(){
+  if(chart) chart.remove();
+
+  chart = LightweightCharts.createChart(document.getElementById('chart'), {
+    layout: { background:{color:'#0f172a'}, textColor:'#cbd5e1' },
+    grid: { vertLines:{color:'rgba(255,255,255,0.05)'}, horzLines:{color:'rgba(255,255,255,0.05)'} },
+    crosshair: { mode: LightweightCharts.CrosshairMode.Magnet },
+    rightPriceScale: { borderColor:'#475569' },
+    timeScale: { borderColor:'#475569', timeVisible:true, secondsVisible:false }
+  });
+
+  candleSeries = chart.addCandlestickSeries({
+    upColor:'#00ff88', borderUpColor:'#00ff88', wickUpColor:'#00ff88',
+    downColor:'#ff3355', borderDownColor:'#ff3355', wickDownColor:'#ff3355'
+  });
+
+  // hover tooltip
+  chart.subscribeCrosshairMove(param => {
+    if(!param || !param.point || !param.time || !param.seriesData || !param.seriesData.has(candleSeries)){
+      tooltip.style.display='none';
+      // crosshair yok -> alt info son mum gösterilsin
+      if(lastCandle){
+        const pct = pctChange(lastCandle.open, lastCandle.close);
+        infoEl.textContent = `Tarih: ${formatTime(lastCandle.time)} | Son Fiyat: ${lastCandle.close} (${pct}%)`;
       }
-      #chart {
-        width: 100%;
-        height: 90vh;
+      return;
+    }
+    const d = param.seriesData.get(candleSeries);
+    const percent = pctChange(d.open, d.close);
+    const up = d.close >= d.open;
+    const color = up ? '#00ff88' : '#ff3355';
+    const symbol = symbolSelect.value.toUpperCase();
+
+    tooltip.innerHTML = `
+      <div><strong>${symbol}</strong> | ${formatTime(param.time)}</div>
+      <div>O: ${Number(d.open).toFixed(2)}</div>
+      <div>H: ${Number(d.high).toFixed(2)}</div>
+      <div>L: ${Number(d.low).toFixed(2)}</div>
+      <div style="color:${color}">C: ${Number(d.close).toFixed(2)} (${percent}%)</div>
+    `;
+    // place tooltip near mouse point but keep inside chartContainer
+    const rect = document.getElementById('chartContainer').getBoundingClientRect();
+    let tx = param.point.x + 16;
+    let ty = param.point.y + 16;
+    // clamp if overflow
+    const ttW = 220, ttH = 110;
+    if(tx + ttW > rect.width) tx = rect.width - ttW - 8;
+    if(ty + ttH > rect.height) ty = rect.height - ttH - 8;
+    tooltip.style.left = `${tx}px`;
+    tooltip.style.top = `${ty}px`;
+    tooltip.style.display='block';
+  });
+
+  // click handler for drawing
+  chart.subscribeClick(param => {
+    if(!drawingTool) return;
+    if(!param || !param.time || !param.point) return;
+
+    const t = param.time; // unix seconds
+    const y = param.point.y;
+    // convert y -> price using right price scale
+    let price;
+    try {
+      price = chart.priceScale('right').coordinateToPrice(y);
+    } catch(e) {
+      // fallback: use lastCandle close
+      price = lastCandle ? lastCandle.close : 0;
+    }
+
+    // TOOL BEHAVIOR
+    if(drawingTool === 'hline'){
+      // yatay: create price line on candleSeries
+      const pl = candleSeries.createPriceLine({ price, color:'#fbbf24', lineWidth:1, axisLabelVisible:true });
+      drawings.push({type:'hline', ref:pl});
+    } else if(drawingTool === 'vline'){
+      // vertical line — use chart API if available; fallback to marker as vertical
+      if(typeof chart.addVerticalLine === 'function'){
+        const vl = chart.addVerticalLine({ time:t, color:'#fbbf24', lineWidth:1 });
+        drawings.push({type:'vline', ref:vl});
+      } else {
+        // fallback: create a thin DIV overlay at x coordinate
+        const rect = document.getElementById('chartContainer').getBoundingClientRect();
+        const x = param.point.x;
+        const el = document.createElement('div');
+        el.style.position='absolute';
+        el.style.left = `${x}px`;
+        el.style.top = '0';
+        el.style.width = '1px';
+        el.style.height = '100%';
+        el.style.background = '#fbbf24';
+        el.style.opacity = '0.8';
+        document.getElementById('chartContainer').appendChild(el);
+        drawings.push({type:'vline', ref:el});
       }
-    </style>
-  </head>
-  <body>
-    <h2>BTC/USDT - Binance Replay</h2>
-    <div id="chart"></div>
-
-    <script>
-      const chart = LightweightCharts.createChart(document.getElementById("chart"), {
-        width: window.innerWidth,
-        height: window.innerHeight * 0.8,
-        layout: { background: { color: "#111" }, textColor: "#fff" },
-        grid: { vertLines: { color: "#333" }, horzLines: { color: "#333" } },
-      });
-
-      const candleSeries = chart.addCandlestickSeries();
-
-      async function loadData() {
-        const res = await fetch("/api/candles?symbol=BTCUSDT&interval=1h&limit=500");
-        const data = await res.json();
-        candleSeries.setData(data);
+    } else if(drawingTool === 'trend'){
+      // trend: two clicks -> line
+      if(!tempState.trendStart){
+        tempState.trendStart = { time:t, price };
+        // give visual feedback maybe
+      } else {
+        const a = tempState.trendStart;
+        const lineSeries = chart.addLineSeries({ color:'#22d3ee', lineWidth:2 });
+        lineSeries.setData([
+          { time:a.time, value:a.price },
+          { time:t, value:price }
+        ]);
+        drawings.push({type:'line', ref:lineSeries, pts:[a,{time:t,price}]});
+        tempState.trendStart = null;
+        // if tool remains selected, user can draw more
       }
+    } else if(drawingTool === 'channel'){
+      // 3 clicks: start, end, offset point
+      if(!tempState.channelStart){
+        tempState.channelStart = { time:t, price };
+      } else if(!tempState.channelEnd){
+        tempState.channelEnd = { time:t, price };
+        // ask for third click to set offset
+      } else {
+        // third click: compute offset = click.price - end.price
+        const offset = price - tempState.channelEnd.price;
+        // create two parallel line series: base and shifted
+        const a = tempState.channelStart;
+        const b = tempState.channelEnd;
+        const line1 = chart.addLineSeries({ color:'#a78bfa', lineWidth:2 });
+        const line2 = chart.addLineSeries({ color:'#a78bfa', lineWidth:2 });
+        line1.setData([{time:a.time, value:a.price},{time:b.time, value:b.price}]);
+        line2.setData([{time:a.time, value:a.price+offset},{time:b.time, value:b.price+offset}]);
+        // optional: create a shaded area between -> not directly supported, so we keep two lines
+        drawings.push({type:'channel', ref:[line1,line2], pts:[a,b, {time:t,price}]});
+        tempState.channelStart = null;
+        tempState.channelEnd = null;
+      }
+    } else if(drawingTool === 'fibo'){
+      // fibo: two clicks define range, then add horizontal lines
+      if(!tempState.fiboStart){
+        tempState.fiboStart = { time:t, price };
+      } else {
+        const a = tempState.fiboStart;
+        const b = { time:t, price };
+        const top = Math.max(a.price, b.price);
+        const bottom = Math.min(a.price, b.price);
+        const diff = top - bottom;
+        const levels = [0, 0.236, 0.382, 0.5, 0.618, 1];
+        const fibLines = [];
+        levels.forEach(l => {
+          const p = bottom + diff * l;
+          // use priceLine on candleSeries
+          const pl = candleSeries.createPriceLine({
+            price: p,
+            color: '#60a5fa',
+            lineWidth: 1,
+            axisLabelVisible:true,
+            title: `${(l*100).toFixed(1)}%`
+          });
+          fibLines.push(pl);
+        });
+        drawings.push({type:'fibo', ref:fibLines, pts:[a,b]});
+        tempState.fiboStart = null;
+      }
+    } else if(drawingTool === 'text'){
+      // add absolute positioned div near the click point inside chartContainer
+      const rect = document.getElementById('chartContainer').getBoundingClientRect();
+      const x = param.point.x;
+      const y = param.point.y;
+      const text = prompt('Metin gir:');
+      if(text){
+        const div = document.createElement('div');
+        div.style.position='absolute';
+        div.style.left = `${x}px`;
+        div.style.top = `${y}px`;
+        div.style.color = '#fff';
+        div.style.background = 'rgba(0,0,0,0.4)';
+        div.style.padding = '4px 6px';
+        div.style.borderRadius = '4px';
+        div.style.fontSize = '12px';
+        div.textContent = text;
+        document.getElementById('chartContainer').appendChild(div);
+        drawings.push({type:'text', ref:div});
+      }
+    }
+  });
 
-      loadData();
-    </script>
-  </body>
+  // resize handling
+  window.addEventListener('resize', () => {
+    chart.applyOptions({
+      width: document.getElementById('chartContainer').clientWidth,
+      height: document.getElementById('chartContainer').clientHeight
+    });
+  });
+}
+
+/* ---------- Data fetching & WebSocket ---------- */
+async function loadData(){
+  const symbol = document.getElementById('symbolSelect').value;
+  const interval = document.getElementById('intervalSelect').value;
+  const url = `https://api.binance.com/api/v3/klines?symbol=${symbol.toUpperCase()}&interval=${interval}&limit=500`;
+  infoEl.textContent = 'Yükleniyor...';
+  try{
+    const res = await fetch(url);
+    const raw = await res.json();
+    const candles = raw.map(d => ({
+      time: Math.floor(d[0]/1000),
+      open:+d[1], high:+d[2], low:+d[3], close:+d[4]
+    }));
+    candleSeries.setData(candles);
+    chart.timeScale().fitContent();
+    lastCandle = candles[candles.length-1];
+    const pct = pctChange(lastCandle.open, lastCandle.close);
+    infoEl.textContent = `Tarih: ${formatTime(lastCandle.time)} | Son Fiyat: ${lastCandle.close} (${pct}%)`;
+    startWebSocket(symbol, interval);
+  }catch(e){
+    console.error('Veri çekme hatası', e);
+    infoEl.textContent = 'Veri yüklenemedi.';
+  }
+}
+
+function startWebSocket(symbol, interval){
+  if(ws) try{ ws.close(); }catch(e){}
+  ws = new WebSocket(`wss://stream.binance.com:9443/ws/${symbol}@kline_${interval}`);
+  ws.onmessage = (evt) => {
+    const msg = JSON.parse(evt.data);
+    const k = msg.k;
+    const candle = {
+      time: Math.floor(k.t/1000),
+      open:+k.o, high:+k.h, low:+k.l, close:+k.c
+    };
+    // update
+    try{
+      candleSeries.update(candle);
+    }catch(e){
+      // fallback if update missing
+      const data = candleSeries.data();
+      if(data.length && data[data.length-1].time === candle.time) data[data.length-1] = candle;
+      else data.push(candle);
+      candleSeries.setData(data);
+    }
+    lastCandle = candle;
+    const pct = pctChange(candle.open, candle.close);
+    infoEl.textContent = `Tarih: ${formatTime(candle.time)} | Son Fiyat: ${candle.close} (${pct}%)`;
+  };
+  ws.onclose = () => { setTimeout(()=> startWebSocket(symbol, interval), 3000); };
+}
+
+/* ---------- UI event bindings ---------- */
+document.getElementById('reload').addEventListener('click', ()=>{ resetTools(); initChart(); loadData(); });
+document.getElementById('zoomIn').addEventListener('click', ()=> chart.timeScale().zoomIn());
+document.getElementById('zoomOut').addEventListener('click', ()=> chart.timeScale().zoomOut());
+document.getElementById('resetZoom').addEventListener('click', ()=> chart.timeScale().fitContent());
+
+document.getElementById('tool-clear').addEventListener('click', ()=> {
+  // remove drawings
+  drawings.forEach(d => {
+    if(!d) return;
+    if(d.type === 'text'){
+      if(d.ref && d.ref.parentNode) d.ref.parentNode.removeChild(d.ref);
+    } else if(Array.isArray(d.ref)){
+      // channel or fibo (array of refs)
+      d.ref.forEach(r => { try{ if(r.remove) r.remove(); else if(typeof r === 'object' && r.applyOptions) r.applyOptions({ visible: false }); }catch(e){} });
+    } else {
+      try{ if(d.ref.remove) d.ref.remove(); else if(typeof d.ref === 'object' && d.ref.applyOptions) d.ref.applyOptions({ visible:false }); }catch(e){}
+    }
+  });
+  drawings.length = 0;
+  window._trendStart = null;
+  clearTempState();
+  drawingTool = '';
+  toolSelect.value = '';
+});
+
+toolSelect.addEventListener('change', (e) => {
+  drawingTool = e.target.value;
+  clearTempState();
+  // visual hint could be added
+});
+
+/* symbol / interval change reload */
+symbolSelect.addEventListener('change', ()=>{ resetTools(); initChart(); loadData(); });
+intervalSelect.addEventListener('change', ()=>{ resetTools(); initChart(); loadData(); });
+
+function resetTools(){
+  drawingTool = '';
+  toolSelect.value = '';
+  clearTempState();
+}
+
+/* ---------- Başlat ---------- */
+initChart();
+loadData();
+
+</script>
+</body>
 </html>

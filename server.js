@@ -4,36 +4,46 @@ import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
 
-const app = express();
-app.use(cors());
-
-// Static frontend'i sun
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-app.use(express.static(path.join(__dirname, "public")));
 
-// Binance verisini çek
+const app = express();
+const PORT = process.env.PORT || 10000;
+
+app.use(cors());
+
+// index.html ve diğer dosyalar aynı dizinde
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "index.html"));
+});
+
+// chart.js veya diğer statik dosyalar için:
+app.use(express.static(__dirname));
+
 app.get("/api/candles", async (req, res) => {
-  const { symbol = "BTCUSDT", interval = "1h", limit = 200 } = req.query;
-
   try {
+    const symbol = req.query.symbol || "BTCUSDT";
+    const interval = req.query.interval || "4h";
+    const limit = req.query.limit || 500;
+
     const response = await axios.get(
       `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`
     );
 
-    const formatted = response.data.map((d) => ({
-      time: d[0] / 1000,
-      open: parseFloat(d[1]),
-      high: parseFloat(d[2]),
-      low: parseFloat(d[3]),
-      close: parseFloat(d[4]),
+    const candles = response.data.map(k => ({
+      time: Math.floor(k[0] / 1000),
+      open: parseFloat(k[1]),
+      high: parseFloat(k[2]),
+      low: parseFloat(k[3]),
+      close: parseFloat(k[4]),
+      volume: parseFloat(k[5])
     }));
 
-    res.json(formatted);
-  } catch (error) {
-    res.status(500).json({ error: "Binance verisi alınamadı" });
+    res.json(candles);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Veri alınırken hata oluştu.");
   }
 });
 
-const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => console.log(`🚀 Sunucu ${PORT} portunda çalışıyor`));
