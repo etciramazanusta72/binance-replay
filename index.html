@@ -1,265 +1,313 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Kripto Replay & Live (Tek Grafik Tam Ekran)</title>
-<script src="https://unpkg.com/lightweight-charts@4.0.0/dist/lightweight-charts.standalone.production.js"></script>
-<style>
-body { margin:0; background:#1e1e1e; color:#eee; font-family:system-ui; }
-#controls { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:12px; background:#2c1a5a; border-bottom:1px solid #333; border-radius:8px 8px 0 0; }
-input, select { background:#3a2b72; color:#fff; border:none; border-radius:6px; padding:6px 8px; font-size:14px; }
-button { background:#9c27b0; color:#fff; border:none; border-radius:6px; padding:6px 10px; font-size:14px; cursor:pointer; }
-#chartContainer { width:calc(100% - 16px); margin:8px; height:calc(100vh - 150px); display:flex; flex-direction:column; border-radius:12px; overflow:hidden; }
-.chartPanel { flex:1; margin:4px 0; border-radius:12px; overflow:hidden; background:#000; position:relative; }
-.singleFullscreenBtn { position:absolute; top:5px; right:5px; z-index:10; background:#9c27b0; padding:4px 6px; font-size:12px; border-radius:4px; cursor:pointer; }
-#sliderContainer { width:calc(100% - 16px); display:flex; align-items:center; gap:4px; margin:8px; padding:0 8px; }
-#timeline { width:100%; }
-.status { margin-left:auto; color:#0f0; font-weight:600; }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kripto Replay & Live (v3.2)</title>
+  <script src="https://unpkg.com/lightweight-charts@4.0.0/dist/lightweight-charts.standalone.production.js"></script>
+  <style>
+    body {
+      background-color: #0e0e0e;
+      color: #fff;
+      font-family: Arial, sans-serif;
+      margin: 0;
+      overflow: hidden;
+    }
+    #controls {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #1b1b1b;
+      padding: 10px 20px;
+      height: 60px;
+      flex-wrap: wrap;
+    }
+    button, select, label {
+      background: #333;
+      color: #fff;
+      border: none;
+      padding: 6px 12px;
+      cursor: pointer;
+      border-radius: 4px;
+      margin-right: 5px;
+      transition: 0.2s;
+    }
+    button:hover, select:hover, label:hover {
+      background: #555;
+    }
+    #chart {
+      height: calc(100vh - 60px - 40px);
+      width: 100vw;
+    }
+    #modeLabel {
+      margin-left: 10px;
+      color: #22ab94;
+      font-weight: bold;
+    }
+    input[type="checkbox"] {
+      accent-color: #22ab94;
+      transform: scale(1.2);
+      margin-right: 3px;
+    }
+    /* === Alt şerit === */
+    #infoBar {
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      background: #1b1b1b;
+      color: #fff;
+      padding: 8px 0;
+      font-family: Arial, sans-serif;
+      font-size: 14px;
+      border-top: 1px solid #333;
+    }
+    #infoBar span {
+      font-weight: bold;
+      color: #22ab94;
+    }
+    #infoBar span#priceChange {
+      color: #f39c12;
+    }
+  </style>
 </head>
 <body>
+  <div id="controls">
+    <div>
+      <select id="symbolSelect" onchange="changeSymbol(this.value)">
+        <option value="BTCUSDT">BTC/USDT</option>
+        <option value="ETHUSDT">ETH/USDT</option>
+        <option value="BNBUSDT">BNB/USDT</option>
+      </select>
 
-<div id="controls">
-  <label>Coin: <input id="coin" value="BTCUSDT"></label>
-  <label>Periyot:
-    <select id="interval">
-      <option>1m</option>
-      <option>5m</option>
-      <option>15m</option>
-      <option>1h</option>
-      <option>4h</option>
-      <option>1d</option>
-    </select>
-  </label>
-  <label>Başlangıç: <input type="date" id="startDate"></label>
-  <label>Bitiş: <input type="date" id="endDate"></label>
-  <label>Hız:
-    <select id="speed">
-      <option value="1">1x</option>
-      <option value="0.5">0.5x</option>
-      <option value="2">2x</option>
-      <option value="4">4x</option>
-    </select>
-  </label>
-  <button id="replayBtn">🎬 Replay</button>
-  <button id="pauseBtn">⏸️ Durdur</button>
-  <button id="rewindBtn">⏪ Geri Sar</button>
-  <button id="stopBtn">⏹️ Stop</button>
-  <button id="liveBtn">🔴 Live</button>
-  <div class="status" id="status">Hazır</div>
-</div>
+      <button onclick="changeInterval('1m')">1m</button>
+      <button onclick="changeInterval('5m')">5m</button>
+      <button onclick="changeInterval('15m')">15m</button>
+      <button onclick="changeInterval('1h')">1h</button>
+      <button onclick="changeInterval('4h')">4h</button>
+    </div>
 
-<div id="sliderContainer">
-  <input type="range" id="timeline" min="0" max="0" value="0">
-</div>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <label><input type="checkbox" id="toggleEMA" checked onchange="toggleEMA()">EMA (20)</label>
+      <label><input type="checkbox" id="toggleSMA" checked onchange="toggleSMA()">SMA (50)</label>
 
-<div id="chartContainer">
-  <div id="chart" class="chartPanel">
-    <button class="singleFullscreenBtn">⛶</button>
+      <label for="replaySpeed">Hız:</label>
+      <select id="replaySpeed" onchange="updateReplaySpeed(this.value)">
+        <option value="1">1x</option>
+        <option value="2">2x</option>
+        <option value="5">5x</option>
+      </select>
+
+      <button onclick="toggleMode()">Replay / Live</button>
+      <span id="modeLabel">Live</span>
+    </div>
   </div>
-</div>
 
-<script>
-// Grafik ve seri oluşturma
-const chartEl = document.getElementById("chart");
-let chart, candleSeries;
-let priceLine = null;
-let ws = null;
-let replayData = [];
-let replayIndex = 0, replayTimer = null, isPaused = false, mode="idle";
-const statusEl = document.getElementById("status");
-const timeline = document.getElementById("timeline");
-const speedSelect = document.getElementById("speed");
+  <div id="chart"></div>
 
-function logStatus(txt,color="#0f0"){
-  statusEl.style.color = color;
-  statusEl.textContent = txt;
-}
+  <!-- === Alt bilgi şeridi === -->
+  <div id="infoBar">
+    <span id="lastPrice">Fiyat: -</span>
+    <span id="priceChange">Değişim: -</span>
+    <span id="candleTime">Zaman: -</span>
+  </div>
 
-function createChart(){
-  if(chart) chart.remove();
-  chart = LightweightCharts.createChart(chartEl, {
-    layout: { background: { color:'#000' }, textColor:'#DDD' },
-    grid: { vertLines:{color:'#222'}, horzLines:{color:'#222'} },
-    timeScale: { timeVisible:true, secondsVisible:false, rightOffset:3, barSpacing:6 },
-    crosshair: { mode: LightweightCharts.CrosshairMode.Normal }
-  });
-  candleSeries = chart.addCandlestickSeries({
-    upColor:'#00FF00', downColor:'#ff0000',
-    borderUpColor:'#00FF00', borderDownColor:'#ff0000',
-    wickUpColor:'#00FF00', wickDownColor:'#ff0000'
-  });
-}
+  <script>
+    let chart, candleSeries, emaSeries, smaSeries, socket;
+    let currentSymbol = "BTCUSDT";
+    let currentInterval = "15m";
+    let liveMode = true;
+    let lastPriceLine = null;
+    let replayIndex = 0;
+    let replayData = [];
+    let replayTimer = null;
+    let replaySpeed = 1;
+    let showEMA = true;
+    let showSMA = true;
 
-function updateLastPrice(series, prevClose, newClose, currentPriceLine){
-  const color = newClose >= prevClose ? '#00ff00' : '#ff0000';
-  if(!currentPriceLine){
-    return series.createPriceLine({
-      price: newClose, color, lineWidth:2, lineStyle:LightweightCharts.LineStyle.Solid,
-      axisLabelVisible:true, title:'Last'
+    // === EMA / SMA ===
+    function ema(data, period) {
+      const k = 2 / (period + 1);
+      let emaArray = [];
+      let prevEma;
+      for (let i = 0; i < data.length; i++) {
+        const close = data[i].close;
+        if (i < period - 1) {
+          emaArray.push({ time: data[i].time, value: null });
+          continue;
+        }
+        if (i === period - 1) {
+          const sum = data.slice(0, period).reduce((s, d) => s + d.close, 0);
+          prevEma = sum / period;
+        } else {
+          prevEma = close * k + prevEma * (1 - k);
+        }
+        emaArray.push({ time: data[i].time, value: prevEma });
+      }
+      return emaArray;
+    }
+
+    function sma(data, period) {
+      return data.map((d, i) => {
+        if (i < period - 1) return { time: d.time, value: null };
+        const avg = data.slice(i - period + 1, i + 1).reduce((sum, x) => sum + x.close, 0) / period;
+        return { time: d.time, value: avg };
+      });
+    }
+
+    // === Chart Başlatma ===
+    function initChart() {
+      if (chart) {
+        chart.remove();
+        chart = null;
+      }
+
+      chart = LightweightCharts.createChart(document.getElementById("chart"), {
+        layout: { background: { color: "#0e0e0e" }, textColor: "#d1d4dc" },
+        grid: { vertLines: { color: "#1e222d" }, horzLines: { color: "#1e222d" } },
+        crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+        rightPriceScale: { borderColor: "#485c7b" },
+        timeScale: { borderColor: "#485c7b" },
+      });
+
+      candleSeries = chart.addCandlestickSeries();
+      emaSeries = chart.addLineSeries({ color: "#22ab94", lineWidth: 1.5 });
+      smaSeries = chart.addLineSeries({ color: "#f39c12", lineWidth: 1.5 });
+    }
+
+    async function fetchHistoricalData(symbol, interval) {
+      const res = await fetch(
+        `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=500`
+      );
+      const data = await res.json();
+      return data.map(k => ({
+        time: k[0] / 1000,
+        open: parseFloat(k[1]),
+        high: parseFloat(k[2]),
+        low: parseFloat(k[3]),
+        close: parseFloat(k[4]),
+      }));
+    }
+
+    // === Replay ===
+    async function startReplay(interval) {
+      cleanup();
+      liveMode = false;
+      document.getElementById("modeLabel").innerText = "Replay";
+
+      initChart();
+      replayData = await fetchHistoricalData(currentSymbol, interval);
+      const emaData = ema(replayData, 20);
+      const smaData = sma(replayData, 50);
+      candleSeries.setData([]);
+      emaSeries.setData([]);
+      smaSeries.setData([]);
+      replayIndex = 0;
+
+      const step = 200 / replaySpeed;
+      replayTimer = setInterval(() => {
+        if (replayIndex < replayData.length) {
+          const c = replayData[replayIndex];
+          candleSeries.update(c);
+          const prevClose = replayIndex > 0 ? replayData[replayIndex - 1].close : c.close;
+          updateLastPrice(c.close, prevClose, c.time);
+          if (showEMA) emaSeries.update(emaData[replayIndex]);
+          if (showSMA) smaSeries.update(smaData[replayIndex]);
+          replayIndex++;
+        } else {
+          clearInterval(replayTimer);
+        }
+      }, step);
+    }
+
+    // === Live ===
+    function startLive(interval = "15m") {
+      cleanup();
+      liveMode = true;
+      document.getElementById("modeLabel").innerText = "Live";
+
+      initChart();
+
+      fetchHistoricalData(currentSymbol, interval).then(data => {
+        candleSeries.setData(data);
+        if (showEMA) emaSeries.setData(ema(data, 20));
+        if (showSMA) smaSeries.setData(sma(data, 50));
+        const last = data[data.length - 1];
+        const prev = data[data.length - 2] || last;
+        updateLastPrice(last.close, prev.close, last.time);
+      });
+
+      socket = new WebSocket(`wss://stream.binance.com:9443/ws/${currentSymbol.toLowerCase()}@kline_${interval}`);
+
+      socket.onmessage = event => {
+        if (!candleSeries) return;
+        const data = JSON.parse(event.data);
+        const k = data.k;
+        const candle = {
+          time: Math.floor(k.t / 1000),
+          open: parseFloat(k.o),
+          high: parseFloat(k.h),
+          low: parseFloat(k.l),
+          close: parseFloat(k.c),
+        };
+        const prevClose = candleSeries.data[candleSeries.data.length - 1]?.close || candle.close;
+        candleSeries.update(candle);
+        updateLastPrice(candle.close, prevClose, candle.time);
+      };
+
+      socket.onclose = () => {
+        console.warn("🔌 Bağlantı koptu, yeniden bağlanacak...");
+        setTimeout(() => {
+          if (liveMode) startLive(interval);
+        }, 5000);
+      };
+    }
+
+    // === Bilgi Şeridi Güncelle ===
+    function updateLastPrice(price, prevClose = null, time = null) {
+      if (!chart || !candleSeries) return;
+
+      if (lastPriceLine) candleSeries.removePriceLine(lastPriceLine);
+      lastPriceLine = candleSeries.createPriceLine({
+        price: price,
+        color: "#22ab94",
+        lineWidth: 2,
+        lineStyle: LightweightCharts.LineStyle.Solid,
+        axisLabelVisible: true,
+        title: `Last: ${price.toFixed(2)}`,
+      });
+
+      document.getElementById("lastPrice").innerText = `Fiyat: ${price.toFixed(2)}`;
+      if (prevClose !== null) {
+        const change = ((price - prevClose) / prevClose) * 100;
+        const sign = change >= 0 ? "+" : "";
+        document.getElementById("priceChange").innerText = `Değişim: ${sign}${change.toFixed(2)}%`;
+      }
+      if (time !== null) {
+        const date = new Date(time * 1000);
+        document.getElementById("candleTime").innerText = `Zaman: ${date.toLocaleString()}`;
+      }
+    }
+
+    // === Kontroller ===
+    function changeInterval(interval) { currentInterval = interval; liveMode ? startLive(interval) : startReplay(interval); }
+    function toggleMode() { liveMode ? startReplay(currentInterval) : startLive(currentInterval); liveMode = !liveMode; }
+    function changeSymbol(symbol) { currentSymbol = symbol; liveMode ? startLive(currentInterval) : startReplay(currentInterval); }
+    function updateReplaySpeed(speed) { replaySpeed = parseFloat(speed); if (!liveMode) startReplay(currentInterval); }
+    function toggleEMA() { showEMA = document.getElementById("toggleEMA").checked; liveMode ? startLive(currentInterval) : startReplay(currentInterval); }
+    function toggleSMA() { showSMA = document.getElementById("toggleSMA").checked; liveMode ? startLive(currentInterval) : startReplay(currentInterval); }
+
+    function cleanup() {
+      if (socket) { socket.onclose = null; socket.close(); socket = null; }
+      if (chart) { chart.remove(); chart = null; candleSeries = null; }
+      if (replayTimer) { clearInterval(replayTimer); replayTimer = null; }
+      lastPriceLine = null;
+    }
+
+    window.addEventListener("resize", () => {
+      if (chart) chart.applyOptions({ width: window.innerWidth, height: window.innerHeight - 60 - 40 });
     });
-  }
-  currentPriceLine.applyOptions({ price: newClose, color });
-  return currentPriceLine;
-}
 
-async function fetchData(symbol, interval, start=0, end=0, limit=1000){
-  let url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
-  if(start && end) url += `&startTime=${start}&endTime=${end}`;
-  const res = await fetch(url);
-  const data = await res.json();
-  return data.map(k => ({
-    time: k[0]/1000,
-    open: +k[1], high: +k[2], low: +k[3], close: +k[4]
-  }));
-}
-
-// Replay fonksiyonu
-async function startReplay(){
-  stopReplay();
-  if(ws) ws.close();
-  mode = "replay";
-  logStatus("Veri çekiliyor...", "#ff0");
-
-  const coin = document.getElementById("coin").value.toUpperCase();
-  const interval = document.getElementById("interval").value;
-  const start = new Date(document.getElementById("startDate").value).getTime();
-  const end = new Date(document.getElementById("endDate").value).getTime();
-  if(!start || !end) return alert("Tarih seç!");
-
-  replayData = await fetchData(coin, interval, start, end);
-  if(!replayData.length) return logStatus("Veri yok", "#f00");
-
-  createChart();
-  replayIndex = 0;
-  timeline.max = replayData.length - 1;
-
-  candleSeries.setData([replayData[0]]);
-  priceLine = updateLastPrice(candleSeries, replayData[0].open, replayData[0].close, priceLine);
-  replayIndex = 1;
-
-  playReplay();
-}
-
-function playReplay(){
-  if(!replayData.length) return;
-  const speed = parseFloat(speedSelect.value);
-  isPaused = false;
-  clearInterval(replayTimer);
-  replayTimer = setInterval(() => {
-    if(isPaused) return;
-    if(replayIndex >= replayData.length){
-      stopReplay();
-      return;
-    }
-
-    const c = replayData[replayIndex];
-    const prev = replayData[replayIndex-1]?.close || c.open;
-
-    candleSeries.update(c);
-    priceLine = updateLastPrice(candleSeries, prev, c.close, priceLine);
-
-    replayIndex++;
-    timeline.value = replayIndex;
-  }, 1000/speed);
-}
-
-function pauseReplay(){
-  isPaused = !isPaused;
-  document.getElementById("pauseBtn").textContent = isPaused ? "▶️ Devam" : "⏸️ Durdur";
-  logStatus(isPaused ? "Durduruldu" : "Devam", "#ff0");
-}
-function stopReplay(){
-  clearInterval(replayTimer);
-  replayTimer = null;
-  replayIndex = 0;
-  logStatus("Replay durdu", "#f00");
-}
-function rewindReplay(){
-  if(mode !== "replay") return;
-  replayIndex = Math.max(0, replayIndex - 10);
-  candleSeries.setData(replayData.slice(0, replayIndex + 1));
-  timeline.value = replayIndex;
-}
-timeline.oninput = () => {
-  if(mode === "replay"){
-    replayIndex = parseInt(timeline.value);
-    candleSeries.setData(replayData.slice(0, replayIndex + 1));
-  }
-}
-
-// Live fonksiyonu
-async function startLive(){
-  stopReplay();
-  mode = "live";
-  logStatus("Canlı mod başlatılıyor...", "#ff0");
-  const coin = document.getElementById("coin").value.toUpperCase();
-  const interval = document.getElementById("interval").value;
-  createChart();
-
-  let data = await fetchData(coin, interval, 0, 0, 500);
-  candleSeries.setData(data);
-  priceLine = updateLastPrice(candleSeries, data.at(-1).close, data.at(-1).close, priceLine);
-
-  if(ws) ws.close();
-  ws = new WebSocket(`wss://stream.binance.com:9443/ws/${coin.toLowerCase()}@kline_${interval}`);
-  ws.onmessage = e => {
-    const k = JSON.parse(e.data).k;
-    const c = {
-      time: k.t/1000,
-      open: +k.o, high: +k.h, low: +k.l, close: +k.c
-    };
-    const prev = data.at(-1)?.close || c.open;
-    if(data.at(-1)?.time === c.time){
-      data[data.length-1] = c;
-    } else {
-      data.push(c);
-      if(data.length > 500) data.shift();
-    }
-    candleSeries.update(c);
-    priceLine = updateLastPrice(candleSeries, prev, c.close, priceLine);
-  };
-
-  chart.timeScale().scrollToRealTime();
-  logStatus("Canlı mod çalışıyor", "#0f0");
-}
-
-// Tam ekran modu (tek grafik)
-let enlarged = null;
-document.querySelectorAll('.singleFullscreenBtn').forEach(btn => {
-  btn.onclick = () => {
-    const parent = btn.parentElement;
-    if(enlarged === parent){
-      // Normal boyuta dön
-      parent.style.position = "";
-      parent.style.width = "";
-      parent.style.height = "";
-      parent.style.zIndex = "";
-      parent.style.background = "#000";
-      parent.style.display = "flex";
-      enlarged = null;
-      btn.textContent = "⛶";
-    } else {
-      // Tam ekrana geç
-      parent.style.position = "fixed";
-      parent.style.top = "0";
-      parent.style.left = "0";
-      parent.style.width = "100%";
-      parent.style.height = "100%";
-      parent.style.zIndex = "999";
-      enlarged = parent;
-      btn.textContent = "❎";
-    }
-  }
-});
-
-// Butonlara işlev atama
-document.getElementById("replayBtn").onclick = startReplay;
-document.getElementById("pauseBtn").onclick = pauseReplay;
-document.getElementById("stopBtn").onclick = stopReplay;
-document.getElementById("rewindBtn").onclick = rewindReplay;
-document.getElementById("liveBtn").onclick = startLive;
-</script>
+    startLive(currentInterval);
+  </script>
 </body>
 </html>
