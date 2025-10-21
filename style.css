@@ -1,0 +1,96 @@
+:root {
+  /* 🎨 Dark Tema */
+  --chart-bg: #0e0e0e;
+  --chart-text: #d1d4dc;
+  --chart-grid: #1e222d;
+  --panel-bg: #1b1b1b;
+  --text-color: #fff;
+}
+
+  .light-theme {
+  /* 🌞 Light Tema */
+  --chart-bg: #ffffff;
+  --chart-text: #1b1b1b;
+  --chart-grid: #e0e0e0;
+  --panel-bg: #f0f0f0;
+  --text-color: #000;
+}
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  font-family: Arial, sans-serif;
+  background-color: var(--chart-bg);
+  color: var(--text-color);
+  overflow: hidden;
+}
+
+#controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--panel-bg);
+  padding: 10px 20px;
+  height: 60px;
+  flex-wrap: wrap;
+  box-sizing: border-box;
+}
+
+button, select, label {
+  background: #333;
+  color: #fff;
+  border: none;
+  padding: 6px 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  margin-right: 5px;
+  transition: 0.2s;
+}
+
+button:hover, select:hover, label:hover {
+  background: #555;
+}
+
+#chart {
+  width: 100%;
+  height: calc(100vh - 60px - 40px);
+}
+
+#modeLabel {
+  margin-left: 10px;
+  color: #22ab94;
+  font-weight: bold;
+}
+
+input[type="checkbox"] {
+  accent-color: #22ab94;
+  transform: scale(1.2);
+  margin-right: 3px;
+}
+
+#infoBar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 40px;
+  background: var(--panel-bg);
+  display: flex;
+  justify-content: flex-end; /* sağa hizala */
+  align-items: center;
+  font-size: 14px;
+  border-top: 1px solid #333;
+  color: var(--text-color);
+  padding-right: 20px;
+  gap: 15px;
+}
+
+#infoBar span {
+  padding: 4px 10px;
+  border-radius: 4px;
+  background: #222;
+}
+
+.change.up { color: #0f0; }
+.change.down { color: #f00; }
