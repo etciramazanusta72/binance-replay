@@ -26,6 +26,7 @@
       <option value="4h">4h</option>
       <option value="1d">1d</option>
     </select>
+    <button id="themeToggle" onclick="toggleTheme()">🌙 / ☀️</button>
   </div>
 
   <div class="right-controls">
@@ -56,6 +57,7 @@
       </select>
     </label>
 
+
     <button onclick="toggleMode()">Replay / Live</button>
     <span id="modeLabel">Live</span>
   </div>
@@ -83,6 +85,7 @@ let replayTimer = null;
 let replaySpeed = 1;
 let emaPeriod = 20;
 let smaPeriod = 50;
+let isLightTheme = false;
 
 /* ======= HELPERS: EMA / SMA ======= */
 function ema(data, period){
@@ -324,6 +327,25 @@ function cleanup(){
   if (chart){ chart.remove(); chart = null; candleSeries = null; emaSeries = null; smaSeries = null; }
   if (replayTimer){ clearInterval(replayTimer); replayTimer = null; }
 }
+
+// LightTheme
+function toggleTheme() {
+  isLightTheme = !isLightTheme;
+  document.body.classList.toggle("light-theme", isLightTheme);
+  if(chart){
+    chart.applyOptions({
+      layout:{
+        background:{color:getComputedStyle(document.body).getPropertyValue("--chart-bg").trim()},
+        textColor:getComputedStyle(document.body).getPropertyValue("--chart-text").trim()
+      },
+      grid:{
+        vertLines:{color:getComputedStyle(document.body).getPropertyValue("--chart-grid").trim()},
+        horzLines:{color:getComputedStyle(document.body).getPropertyValue("--chart-grid").trim()}
+      }
+    });
+  }
+}
+
 
 window.addEventListener('resize', ()=>{ if (chart) chart.applyOptions({ width: window.innerWidth, height: window.innerHeight - 100 }); });
 
