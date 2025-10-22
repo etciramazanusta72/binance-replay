@@ -16,14 +16,61 @@
   --text-color: #000;
 }
 
+/* genel */
+html,body{height:100%;margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--chart-bg);color:var(--text-color);overflow:hidden}
+#controls{height:60px;background:var(--panel-bg);display:flex;justify-content:space-between;align-items:center;padding:8px 12px;box-sizing:border-box;gap:10px}
+#controls select, #controls button{background:#333;color:#fff;border:none;padding:6px 8px;border-radius:4px}
+#chartContainer, #chart{width:100%;height:calc(100vh - 100px);position:relative}
+#tooltip{position:absolute;z-index:20;pointer-events:none;background:rgba(10,10,10,0.95);color:#fff;padding:8px;border-radius:6px;border:1px solid #333;font-size:13px;min-width:160px}
+#infoBar{position:fixed;bottom:0;left:0;width:100%;height:40px;background:var(--panel-bg);display:flex;justify-content:flex-end;align-items:center;padding-right:20px;gap:14px;border-top:1px solid #333;box-sizing:border-box}
+#infoBar span{background:#222;padding:6px 10px;border-radius:6px}
+.up{color:#0f0}
+.down{color:#f44}
+/* tooltip small styles */
+.tt-date{font-weight:700;margin-bottom:6px}
+.tt-up{color:#0f0}
+.tt-down{color:#f66}
+
 html, body {
   height: 100%;
   margin: 0;
   padding: 0;
+  overflow: hidden;
   font-family: Arial, sans-serif;
   background-color: var(--chart-bg);
   color: var(--text-color);
-  overflow: hidden;
+}
+
+#themeToggle {
+  background: #333;
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 16px;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: 0.3s;
+}
+#themeToggle:hover {
+  background: #555;
+}
+.light-theme #themeToggle {
+  background: #ddd;
+  color: #111;
+}
+
+#tooltip {
+  position: absolute;
+  display: none;
+  background: rgba(20, 20, 20, 0.95);
+  color: #fff;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  pointer-events: none;
+  z-index: 10;
+  white-space: pre;
+  border: 1px solid #333;
 }
 
 #controls {
@@ -81,8 +128,8 @@ input[type="checkbox"] {
   align-items: center;
   font-size: 14px;
   border-top: 1px solid #333;
-  color: var(--text-color);
-  padding-right: 20px;
+  color: #fff;
+  padding-right: 20px; /* sağdan boşluk */
   gap: 15px;
 }
 
