@@ -1,16 +1,17 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Kripto Replay & Live (v5)</title>
-  <script src="https://unpkg.com/lightweight-charts@4.0.0/dist/lightweight-charts.standalone.production.js"></script>
-  <link rel="stylesheet" href="style.css">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Kripto Replay & Live (fixed tooltip + none indicators)</title>
+
+<link rel="stylesheet" href="style.css">
+<script src="https://unpkg.com/lightweight-charts@4.0.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
 
 <div id="controls">
-  <div>
+  <div class="left-controls">
     <select id="symbolSelect" onchange="changeSymbol(this.value)">
       <option value="BTCUSDT">BTC/USDT</option>
       <option value="ETHUSDT">ETH/USDT</option>
@@ -20,39 +21,324 @@
     <select id="intervalSelect" onchange="changeInterval(this.value)">
       <option value="1m">1m</option>
       <option value="5m">5m</option>
-      <option value="15m">15m</option>
+      <option value="15m" selected>15m</option>
       <option value="1h">1h</option>
       <option value="4h">4h</option>
       <option value="1d">1d</option>
-      <option value="1w">1w</option>
-      <option value="1M">1M</option>
     </select>
   </div>
 
-  <div style="display:flex; align-items:center; gap:10px;">
-    <label><input type="checkbox" id="toggleEMA" checked onchange="toggleEMA()">EMA (20)</label>
-    <label><input type="checkbox" id="toggleSMA" checked onchange="toggleSMA()">SMA (50)</label>
+  <div class="right-controls">
+    <label>EMA:
+      <select id="emaSelect" onchange="updateEMA(this.value)">
+        <option value="none">None</option>
+        <option value="9">9</option>
+        <option value="20" selected>20</option>
+        <option value="50">50</option>
+      </select>
+    </label>
 
-    <label for="replaySpeed">Hız:</label>
-    <select id="replaySpeed" onchange="updateReplaySpeed(this.value)">
-      <option value="1">1x</option>
-      <option value="2">2x</option>
-      <option value="5">5x</option>
-    </select>
+    <label>SMA:
+      <select id="smaSelect" onchange="updateSMA(this.value)">
+        <option value="none">None</option>
+        <option value="9">9</option>
+        <option value="20">20</option>
+        <option value="50" selected>50</option>
+        <option value="100">100</option>
+      </select>
+    </label>
+
+    <label>Hız:
+      <select id="replaySpeed" onchange="updateReplaySpeed(this.value)">
+        <option value="1">1x</option>
+        <option value="2">2x</option>
+        <option value="5">5x</option>
+      </select>
+    </label>
 
     <button onclick="toggleMode()">Replay / Live</button>
     <span id="modeLabel">Live</span>
   </div>
 </div>
 
-<div id="chart"></div>
-
-<div id="infoBar">
-  <span id="candleTime">Zaman: --</span>
-  <span id="lastPrice">Fiyat: 0</span>
-  <span id="priceChange">Değişim: 0%</span>
+<div id="chartContainer">
+  <div id="chart"></div>
+  <div id="tooltip" style="display:none;"></div>
 </div>
 
-<script src="script.js"></script>
+<div id="infoBar">
+  <span id="dateTime">--</span>
+  <span id="lastPrice">Fiyat: --</span>
+  <span id="priceChange">Değişim: --</span>
+</div>
+
+<script>
+/* ========= GLOBALS ========= */
+let chart, candleSeries, emaSeries, smaSeries, socket;
+let currentSymbol = "BTCUSDT";
+let currentInterval = "15m";
+let liveMode = true;
+let replayData = [];        // historical + appended live candles (used for indicators)
+let replayTimer = null;
+let replaySpeed = 1;
+let emaPeriod = 20;
+let smaPeriod = 50;
+
+/* ======= HELPERS: EMA / SMA ======= */
+function ema(data, period){
+  if (!Array.isArray(data) || data.length === 0) return [];
+  const k = 2 / (period + 1);
+  const out = [];
+  let prev = null;
+  for (let i = 0; i < data.length; i++){
+    const t = data[i].time;
+    const close = Number(data[i].close);
+    if (i < period - 1) { out.push({ time: t, value: null }); continue; }
+    if (i === period - 1) {
+      let sum = 0;
+      for (let j = 0; j < period; j++) sum += Number(data[j].close);
+      prev = sum / period;
+    } else {
+      prev = close * k + prev * (1 - k);
+    }
+    out.push({ time: t, value: Number.isFinite(prev) ? prev : null });
+  }
+  return out;
+}
+function sma(data, period){
+  if (!Array.isArray(data) || data.length === 0) return [];
+  const out = [];
+  for (let i = 0; i < data.length; i++){
+    const t = data[i].time;
+    if (i < period - 1) { out.push({ time: t, value: null }); continue; }
+    let sum = 0;
+    for (let j = i - period + 1; j <= i; j++) sum += Number(data[j].close);
+    const avg = sum / period;
+    out.push({ time: t, value: Number.isFinite(avg) ? avg : null });
+  }
+  return out;
+}
+function hasValidPoints(arr){
+  return Array.isArray(arr) && arr.some(p => p && p.value !== null && Number.isFinite(p.value));
+}
+
+/* ======= CHART INIT ======= */
+function initChart(){
+  if (chart) { chart.remove(); chart = null; }
+  chart = LightweightCharts.createChart(document.getElementById('chart'), {
+    layout: { background: { color: getComputedStyle(document.body).getPropertyValue('--chart-bg') || '#0e0e0e' }, textColor: getComputedStyle(document.body).getPropertyValue('--chart-text') || '#d1d4dc' },
+    grid: { vertLines: { color: getComputedStyle(document.body).getPropertyValue('--chart-grid') || '#1e222d' }, horzLines: { color: getComputedStyle(document.body).getPropertyValue('--chart-grid') || '#1e222d' } },
+    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+    rightPriceScale: { borderColor: '#485c7b' },
+    timeScale: { borderColor: '#485c7b' }
+  });
+  candleSeries = chart.addCandlestickSeries({
+    upColor: '#26a69a', borderUpColor:'#26a69a', wickUpColor:'#26a69a',
+    downColor:'#ef5350', borderDownColor:'#ef5350', wickDownColor:'#ef5350'
+  });
+  emaSeries = chart.addLineSeries({ color: '#f39c12', lineWidth: 1.2 });
+  smaSeries = chart.addLineSeries({ color: '#00bcd4', lineWidth: 1.2 });
+
+  setupTooltip();
+}
+
+/* ======= TOOLTIP ======= */
+function setupTooltip(){
+  const tip = document.getElementById('tooltip');
+  // hide initially
+  tip.style.display = 'none';
+  chart.subscribeCrosshairMove(param => {
+    if (!param || !param.time || !param.point || !param.seriesData) {
+      tip.style.display = 'none';
+      return;
+    }
+    const candle = param.seriesData.get(candleSeries);
+    if (!candle) { tip.style.display = 'none'; return; }
+
+    const date = new Date(param.time * 1000);
+    const tarih = date.toLocaleDateString('tr-TR');
+    const saat = date.toLocaleTimeString('tr-TR', { hour12:false });
+
+    const change = candle.close - candle.open;
+    const changePct = (change / candle.open) * 100;
+    const sign = change >= 0 ? '+' : '';
+
+    tip.innerHTML =
+      `<div class="tt-date">${tarih} ${saat}</div>
+       <div>O: ${candle.open.toFixed(2)} &nbsp; H: ${candle.high.toFixed(2)} &nbsp; L: ${candle.low.toFixed(2)} &nbsp; C: ${candle.close.toFixed(2)}</div>
+       <div class="${change>=0? 'tt-up':'tt-down'}">Change: ${sign}${change.toFixed(2)} (${sign}${changePct.toFixed(2)}%)</div>`;
+
+    const rect = document.getElementById('chart').getBoundingClientRect();
+    // position the tooltip near the crosshair point but keep inside viewport
+    let left = rect.left + param.point.x + 12;
+    let top = rect.top + param.point.y - 60;
+    if (left + tip.offsetWidth > window.innerWidth) left = rect.left + param.point.x - tip.offsetWidth - 12;
+    if (top < 8) top = rect.top + param.point.y + 12;
+    tip.style.left = left + 'px';
+    tip.style.top = top + 'px';
+    tip.style.display = 'block';
+  });
+}
+
+/* ======= HISTORICAL FETCH (BINANCE) ======= */
+async function fetchHistoricalData(symbol, interval){
+  const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=1000`);
+  const data = await res.json();
+  return data.map(k => ({
+    time: Math.floor(k[0]/1000),
+    open: parseFloat(k[1]),
+    high: parseFloat(k[2]),
+    low: parseFloat(k[3]),
+    close: parseFloat(k[4])
+  }));
+}
+
+/* ======= REPLAY / LIVE ======= */
+async function startReplay(interval){
+  cleanup();
+  liveMode = false;
+  document.getElementById('modeLabel').innerText = 'Replay';
+  initChart();
+
+  replayData = await fetchHistoricalData(currentSymbol, interval);
+
+  // indicators
+  if (emaPeriod && emaPeriod !== 'none') {
+    const e = ema(replayData, Number(emaPeriod));
+    if (hasValidPoints(e)) try { emaSeries.setData(e); } catch(err){ console.warn(err); }
+  } else { emaSeries.setData([]); }
+  if (smaPeriod && smaPeriod !== 'none') {
+    const s = sma(replayData, Number(smaPeriod));
+    if (hasValidPoints(s)) try { smaSeries.setData(s); } catch(err){ console.warn(err); }
+  } else { smaSeries.setData([]); }
+
+  candleSeries.setData([]);
+  replayIndex = 0;
+  const step = Math.max(20, 200 / replaySpeed);
+  replayTimer = setInterval(() => {
+    try {
+      if (replayIndex < replayData.length) {
+        const c = replayData[replayIndex];
+        candleSeries.update(c);
+        // per-point indicator updates (only if computed)
+        if (emaPeriod && emaPeriod !== 'none') {
+          const ePoint = ema(replayData.slice(0, replayIndex + 1), Number(emaPeriod)).slice(-1)[0];
+          if (ePoint && ePoint.value !== null && Number.isFinite(ePoint.value)) try { emaSeries.update(ePoint); } catch(e){/*ignore*/ }
+        }
+        if (smaPeriod && smaPeriod !== 'none') {
+          const sPoint = sma(replayData.slice(0, replayIndex + 1), Number(smaPeriod)).slice(-1)[0];
+          if (sPoint && sPoint.value !== null && Number.isFinite(sPoint.value)) try { smaSeries.update(sPoint); } catch(e){/*ignore*/ }
+        }
+        updateInfoBar(c);
+        replayIndex++;
+      } else {
+        clearInterval(replayTimer); replayTimer = null;
+      }
+    } catch(err){
+      console.error('replay loop error', err);
+      clearInterval(replayTimer); replayTimer = null;
+    }
+  }, step);
+}
+
+async function startLive(interval = "15m"){
+  cleanup();
+  liveMode = true;
+  document.getElementById('modeLabel').innerText = 'Live';
+  initChart();
+
+  const hist = await fetchHistoricalData(currentSymbol, interval);
+  replayData = hist.slice();
+  candleSeries.setData(hist);
+
+  if (emaPeriod && emaPeriod !== 'none') {
+    const e = ema(replayData, Number(emaPeriod));
+    if (hasValidPoints(e)) try { emaSeries.setData(e); } catch(err){ console.warn(err); } else emaSeries.setData([]);
+  } else { emaSeries.setData([]); }
+  if (smaPeriod && smaPeriod !== 'none') {
+    const s = sma(replayData, Number(smaPeriod));
+    if (hasValidPoints(s)) try { smaSeries.setData(s); } catch(err){ console.warn(err); } else smaSeries.setData([]);
+  } else { smaSeries.setData([]); }
+
+  if (hist.length) updateInfoBar(hist[hist.length - 1]);
+
+  // websocket
+  socket = new WebSocket(`wss://stream.binance.com:9443/ws/${currentSymbol.toLowerCase()}@kline_${interval}`);
+  socket.onmessage = (evt) => {
+    try {
+      const data = JSON.parse(evt.data);
+      const k = data.k;
+      const candle = {
+        time: Math.floor(k.t / 1000),
+        open: parseFloat(k.o),
+        high: parseFloat(k.h),
+        low: parseFloat(k.l),
+        close: parseFloat(k.c)
+      };
+      candleSeries.update(candle);
+      // append to replayData
+      replayData.push(candle);
+      // update latest indicator point safely
+      if (emaPeriod && emaPeriod !== 'none') {
+        const e = ema(replayData, Number(emaPeriod));
+        const lastE = e.length ? e[e.length - 1] : null;
+        if (lastE && lastE.value !== null && Number.isFinite(lastE.value)) try { emaSeries.update(lastE); } catch(e){/*ignore*/ }
+      }
+      if (smaPeriod && smaPeriod !== 'none') {
+        const s = sma(replayData, Number(smaPeriod));
+        const lastS = s.length ? s[s.length - 1] : null;
+        if (lastS && lastS.value !== null && Number.isFinite(lastS.value)) try { smaSeries.update(lastS); } catch(e){/*ignore*/ }
+      }
+      updateInfoBar(candle);
+    } catch(err){
+      console.error('socket msg error', err);
+    }
+  };
+  socket.onclose = () => { setTimeout(()=>{ if (liveMode) startLive(interval); }, 4000); };
+}
+
+/* ======= INFO BAR ======= */
+function updateInfoBar(candle){
+  if (!candle) return;
+  const price = Number(candle.close);
+  const open = Number(candle.open);
+  const change = price - open;
+  const pct = (change / open) * 100;
+  document.getElementById('lastPrice').innerText = `Fiyat: ${price.toFixed(2)}`;
+  const sign = change >= 0 ? '+' : '';
+  const pcElem = document.getElementById('priceChange');
+  pcElem.innerHTML = `Değişim: <span class="${change>=0?'up':'down'}">${sign}${change.toFixed(2)} (${sign}${pct.toFixed(2)}%)</span>`;
+}
+
+/* ======= CONTROLS ======= */
+function changeSymbol(s){ currentSymbol = s; if (liveMode) startLive(currentInterval); else startReplay(currentInterval); }
+function changeInterval(i){ currentInterval = i; if (liveMode) startLive(i); else startReplay(i); }
+function toggleMode(){ liveMode = !liveMode; if (liveMode) startLive(currentInterval); else startReplay(currentInterval); }
+function updateReplaySpeed(s){ replaySpeed = Number(s); if (!liveMode && replayTimer) { startReplay(currentInterval); } }
+function updateEMA(v){ emaPeriod = v; if (liveMode) startLive(currentInterval); else startReplay(currentInterval); }
+function updateSMA(v){ smaPeriod = v; if (liveMode) startLive(currentInterval); else startReplay(currentInterval); }
+
+/* ======= CLEANUP & UTIL ======= */
+function cleanup(){
+  if (socket){ socket.onclose = null; socket.close(); socket = null; }
+  if (chart){ chart.remove(); chart = null; candleSeries = null; emaSeries = null; smaSeries = null; }
+  if (replayTimer){ clearInterval(replayTimer); replayTimer = null; }
+}
+
+window.addEventListener('resize', ()=>{ if (chart) chart.applyOptions({ width: window.innerWidth, height: window.innerHeight - 100 }); });
+
+/* ======= CLOCK (DATE + TIME) ======= */
+function tickClock(){
+  const now = new Date();
+  const date = now.toLocaleDateString('tr-TR');
+  const time = now.toLocaleTimeString('tr-TR', { hour12: false });
+  document.getElementById('dateTime').innerText = `${date} ${time}`;
+}
+setInterval(tickClock, 1000);
+tickClock();
+
+/* ======= START ======= */
+startLive(currentInterval);
+</script>
 </body>
 </html>
