@@ -169,6 +169,17 @@ html, body {
   border-radius: 6px;
 }
 
+#infoBar span span.up {
+  color: #0f0;
+  background: transparent;
+}
+
+#infoBar span span.down {
+  color: #f44;
+  background: transparent;
+}
+
+
 .change.up { color: #0f0; }
 .change.down { color: #f44; }
 
